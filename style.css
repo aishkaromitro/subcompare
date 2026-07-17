@@ -358,6 +358,14 @@ thead th {
   z-index: 1;
 }
 thead th:hover { color: var(--text); }
+thead th.sort-asc::after  { content: " \25B2"; font-size: 9px; color: var(--accent); }
+thead th.sort-desc::after { content: " \25BC"; font-size: 9px; color: var(--accent); }
+.table-empty {
+  text-align: center;
+  color: var(--text-faint);
+  padding: 32px 12px !important;
+}
+.table-empty-cell { color: var(--text-faint); }
 tbody td {
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
