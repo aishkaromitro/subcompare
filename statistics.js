@@ -38,28 +38,43 @@
   }
 
   /**
+   * Annotates a single row with diffMs, quality, and pre-computed diff
+   * HTML for both sides. Separated from annotateRows so an inline text
+   * edit can re-annotate just the one affected row without touching the
+   * stable `id` every row was assigned at alignment time.
+   */
+  function annotateRow(row) {
+    if (row.a && row.b) {
+      row.diffMs = row.b.startMs - row.a.startMs;
+      row.quality = qualityFor(row.diffMs);
+      const { htmlA, htmlB } = global.SubtitleDiff.renderDiffHtml(row.a.text, row.b.text);
+      row.htmlA = htmlA;
+      row.htmlB = htmlB;
+      row.textDiff = global.SubtitleDiff.diffSummary(row.a.text, row.b.text);
+    } else {
+      row.diffMs = null;
+      row.quality = qualityFor(null);
+      row.htmlA = row.a ? escapeHtml(row.a.text) : '';
+      row.htmlB = row.b ? escapeHtml(row.b.text) : '';
+      row.textDiff = { inserted: 0, removed: 0, changed: 0, hasDifference: false };
+    }
+    return row;
+  }
+
+  /**
    * Annotates each alignment row with diffMs, quality, and pre-computed
-   * diff HTML for both sides. Mutates and returns the same array for
-   * convenience (rows are already freshly built by the aligner, so this
-   * is safe and avoids a second full-array copy for large files).
+   * diff HTML for both sides, plus a stable `id` (its index at
+   * annotation time) so later code — e.g. inline editing — can look a
+   * row back up after the rendered array has been filtered/sorted.
+   * Mutates and returns the same array for convenience (rows are
+   * already freshly built by the aligner, so this is safe and avoids a
+   * second full-array copy for large files).
    */
   function annotateRows(rows) {
-    for (const row of rows) {
-      if (row.a && row.b) {
-        row.diffMs = row.b.startMs - row.a.startMs;
-        row.quality = qualityFor(row.diffMs);
-        const { htmlA, htmlB } = global.SubtitleDiff.renderDiffHtml(row.a.text, row.b.text);
-        row.htmlA = htmlA;
-        row.htmlB = htmlB;
-        row.textDiff = global.SubtitleDiff.diffSummary(row.a.text, row.b.text);
-      } else {
-        row.diffMs = null;
-        row.quality = qualityFor(null);
-        row.htmlA = row.a ? escapeHtml(row.a.text) : '';
-        row.htmlB = row.b ? escapeHtml(row.b.text) : '';
-        row.textDiff = { inserted: 0, removed: 0, changed: 0, hasDifference: false };
-      }
-    }
+    rows.forEach((row, idx) => {
+      row.id = idx;
+      annotateRow(row);
+    });
     return rows;
   }
 
@@ -227,6 +242,7 @@
 
   global.SubtitleStats = {
     qualityFor,
+    annotateRow,
     annotateRows,
     computeStatistics,
     computeGraphData,

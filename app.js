@@ -66,8 +66,8 @@
     exportCsv: document.getElementById('exportCsv'),
     exportJson: document.getElementById('exportJson'),
     exportHtml: document.getElementById('exportHtml'),
-
-    tcReadout: document.getElementById('tcReadout')
+    exportSrtA: document.getElementById('exportSrtA'),
+    exportSrtB: document.getElementById('exportSrtB')
   };
 
   /* ---------------------------------------------------------------------
@@ -219,6 +219,80 @@
   }
 
   /* ---------------------------------------------------------------------
+   * Inline editing — subtitle text cells are contenteditable. Editing is
+   * wired here (not ui.js) via delegation on the table body so it keeps
+   * working across re-renders without needing to be reattached per row.
+   *
+   * row.a / row.b are the SAME object instances as the entries in
+   * state.fileA.cues / state.fileB.cues (alignment.js pushes direct cue
+   * references into each row), so editing a cell here also mutates the
+   * underlying cue — which is exactly what lets "export as .srt" pick up
+   * edits with no extra bookkeeping.
+   * ------------------------------------------------------------------- */
+
+  function findRowById(id) {
+    const numId = Number(id);
+    return state.rows.find(row => row.id === numId);
+  }
+
+  function setupInlineEditing() {
+    el.tableBody.addEventListener('focusin', e => {
+      const cell = e.target.closest('.editable-cell');
+      if (!cell) return;
+      const row = findRowById(cell.dataset.rowId);
+      if (!row) return;
+      const cue = cell.dataset.side === 'a' ? row.a : row.b;
+      // Swap to plain text while editing — editing directly over the
+      // diff-highlighted <del>/<ins> markup would let keystrokes land
+      // inside those tags and corrupt the rendered diff.
+      cell.textContent = cue.text;
+    });
+
+    el.tableBody.addEventListener('keydown', e => {
+      if (e.key !== 'Escape') return;
+      const cell = e.target.closest('.editable-cell');
+      if (!cell) return;
+      e.preventDefault();
+      cell.dataset.cancelled = 'true';
+      cell.blur();
+    });
+
+    // Force plain-text paste so edits can't drag in foreign HTML
+    // formatting (or markup that would masquerade as diff spans) from
+    // whatever the user copied the replacement text from.
+    el.tableBody.addEventListener('paste', e => {
+      const cell = e.target.closest('.editable-cell');
+      if (!cell) return;
+      e.preventDefault();
+      const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+      document.execCommand('insertText', false, text);
+    });
+
+    el.tableBody.addEventListener('focusout', e => {
+      const cell = e.target.closest('.editable-cell');
+      if (!cell) return;
+      const cancelled = cell.dataset.cancelled === 'true';
+      delete cell.dataset.cancelled;
+
+      if (!cancelled) {
+        const row = findRowById(cell.dataset.rowId);
+        if (row) {
+          const cue = cell.dataset.side === 'a' ? row.a : row.b;
+          const newText = cell.innerText.replace(/\n+$/, '');
+          if (newText !== cue.text) {
+            cue.text = newText;
+            cue.lines = newText.split('\n');
+            SubtitleStats.annotateRow(row);
+          }
+        }
+      }
+      // Always re-render: restores the diff-highlighted view we swapped
+      // out on focus, whether or not anything actually changed.
+      renderTableWithCurrentFilters();
+    });
+  }
+
+  /* ---------------------------------------------------------------------
    * Reset
    * ------------------------------------------------------------------- */
 
@@ -249,21 +323,6 @@
   }
 
   /* ---------------------------------------------------------------------
-   * Live timecode readout in the header — a small ambient touch, not
-   * tied to app state; just ticks with the wall clock.
-   * ------------------------------------------------------------------- */
-  function startHeaderClock() {
-    if (!el.tcReadout) return;
-    const start = performance.now();
-    function tick() {
-      const elapsed = performance.now() - start;
-      el.tcReadout.textContent = SubtitleParser.msToTime(elapsed % 3600000);
-      requestAnimationFrame(tick);
-    }
-    tick();
-  }
-
-  /* ---------------------------------------------------------------------
    * Init
    * ------------------------------------------------------------------- */
 
@@ -276,6 +335,7 @@
     el.resetBtn.addEventListener('click', resetAll);
 
     setupTableControls();
+    setupInlineEditing();
 
     el.exportCsv.addEventListener('click', () => SubtitleExport.downloadCsv(state.rows));
     el.exportJson.addEventListener('click', () =>
@@ -284,9 +344,18 @@
     el.exportHtml.addEventListener('click', () =>
       SubtitleExport.downloadHtmlReport(state.rows, state.stats, { filenameA: state.fileA.filename, filenameB: state.fileB.filename, mode: state.mode })
     );
+    el.exportSrtA.addEventListener('click', () =>
+      SubtitleExport.downloadSrt(state.fileA.cues, srtFilenameFor(state.fileA.filename))
+    );
+    el.exportSrtB.addEventListener('click', () =>
+      SubtitleExport.downloadSrt(state.fileB.cues, srtFilenameFor(state.fileB.filename))
+    );
 
-    startHeaderClock();
     updateCompareEnabled();
+  }
+
+  function srtFilenameFor(originalName) {
+    return originalName.replace(/\.[^./\\]+$/, '') + '.edited.srt';
   }
 
   document.addEventListener('DOMContentLoaded', init);

@@ -58,6 +58,23 @@
   }
 
   /**
+   * Serializes a cue array (e.g. state.fileA.cues, possibly carrying
+   * inline edits made in the table) back into standard SRT text.
+   * Cue indices are renumbered sequentially — the original numbering
+   * from the source file isn't meaningful after edits and may have
+   * gaps, so a clean 1..N sequence is the only thing worth writing out.
+   */
+  function buildSrt(cues) {
+    const sorted = [...cues].sort((a, b) => a.startMs - b.startMs);
+    const blocks = sorted.map((cue, i) => {
+      const start = P().msToTime(cue.startMs);
+      const end = P().msToTime(cue.endMs);
+      return `${i + 1}\n${start} --> ${end}\n${cue.text}`;
+    });
+    return blocks.join('\n\n') + '\n';
+  }
+
+  /**
    * Builds a fully self-contained HTML report: stats table, comparison
    * table with the same colour coding as the live app, embedded CSS,
    * no external requests of any kind. This is a snapshot, not the live
@@ -171,13 +188,19 @@
     triggerDownload(buildHtmlReport(rows, stats, meta), 'subtitle-comparison-report.html', 'text/html;charset=utf-8');
   }
 
+  function downloadSrt(cues, filename) {
+    triggerDownload(buildSrt(cues), filename, 'text/plain;charset=utf-8');
+  }
+
   global.SubtitleExport = {
     buildCsv,
     buildJson,
     buildHtmlReport,
+    buildSrt,
     downloadCsv,
     downloadJson,
-    downloadHtmlReport
+    downloadHtmlReport,
+    downloadSrt
   };
 
 })(typeof window !== 'undefined' ? window : globalThis);

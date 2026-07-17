@@ -24,7 +24,6 @@
           <p class="tagline">Compare two subtitle files by timecode — not by number.</p>
         </div>
       </div>
-      <div class="tc-readout" id="tcReadout" aria-hidden="true">00:00:00,000</div>
     </div>
   </header>
 
@@ -138,6 +137,10 @@
       <button class="btn btn-ghost" id="exportCsv">CSV</button>
       <button class="btn btn-ghost" id="exportJson">JSON</button>
       <button class="btn btn-ghost" id="exportHtml">Standalone HTML report</button>
+      <span class="export-divider" aria-hidden="true"></span>
+      <span class="export-label">Edited subtitles</span>
+      <button class="btn btn-ghost" id="exportSrtA">Subtitle A (.srt)</button>
+      <button class="btn btn-ghost" id="exportSrtB">Subtitle B (.srt)</button>
     </section>
 
   </main>

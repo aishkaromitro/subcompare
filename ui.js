@@ -138,6 +138,12 @@
       const qLabel = row.quality ? row.quality.label : 'No match';
       const htmlA = highlight(row.htmlA || '', q);
       const htmlB = highlight(row.htmlB || '', q);
+      const cellA = row.a
+        ? `<td class="editable-cell" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" data-row-id="${row.id}" data-side="a">${htmlA}</td>`
+        : `<td><span class="table-empty-cell">—</span></td>`;
+      const cellB = row.b
+        ? `<td class="editable-cell" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" data-row-id="${row.id}" data-side="b">${htmlB}</td>`
+        : `<td><span class="table-empty-cell">—</span></td>`;
 
       return `
         <tr data-diff="${row.diffMs === null ? '' : row.diffMs}">
@@ -145,8 +151,8 @@
           <td class="mono">${highlightPlain(timeB, q)}</td>
           <td class="mono">${diffLabel}</td>
           <td><span class="quality-dot q-${qKey}"></span>${qLabel}</td>
-          <td>${htmlA || '<span class="table-empty-cell">—</span>'}</td>
-          <td>${htmlB || '<span class="table-empty-cell">—</span>'}</td>
+          ${cellA}
+          ${cellB}
         </tr>`;
     }).join('');
 

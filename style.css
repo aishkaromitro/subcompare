@@ -98,18 +98,6 @@ button, input, select { font-family: inherit; font-size: inherit; }
   color: var(--text-muted);
   font-size: 12.5px;
 }
-.tc-readout {
-  font-family: var(--font-mono);
-  color: var(--accent);
-  font-size: 20px;
-  letter-spacing: 0.04em;
-  padding: 6px 12px;
-  border: 1px solid var(--accent-dim);
-  border-radius: var(--radius);
-  background: #1A1305;
-  text-shadow: 0 0 8px rgba(242,184,75,0.35);
-}
-
 /* ============ LAYOUT ============ */
 .app-main {
   max-width: 1180px;
@@ -375,6 +363,17 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
 tbody tr.row-highlight { background: rgba(242,184,75,0.08); }
 .mono { font-family: var(--font-mono); font-size: 12.5px; }
 
+.editable-cell {
+  cursor: text;
+  white-space: pre-wrap;
+}
+.editable-cell:hover { background: rgba(255,255,255,0.03); }
+.editable-cell:focus {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+  background: rgba(242,184,75,0.06);
+}
+
 .quality-dot {
   display: inline-block;
   width: 9px;
@@ -422,11 +421,17 @@ mark.search-hit {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 .export-label {
   color: var(--text-muted);
   font-size: 12.5px;
   margin-right: 4px;
+}
+.export-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
 }
 
 /* ============ FOOTER ============ */
