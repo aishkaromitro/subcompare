@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Subtitle Comparator</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ============ HEADER ============ -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6">
+            <rect x="2" y="5" width="20" height="14" rx="1.5"/>
+            <path d="M2 9h20"/>
+            <path d="M7 14h4M13 14h4" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <div>
+          <h1>Subtitle Comparator</h1>
+          <p class="tagline">Compare two subtitle files by timecode — not by number.</p>
+        </div>
+      </div>
+      <div class="tc-readout" id="tcReadout" aria-hidden="true">00:00:00,000</div>
+    </div>
+  </header>
+
+  <main class="app-main">
+
+    <!-- ============ UPLOAD SECTION ============ -->
+    <section class="panel upload-panel" aria-label="Load subtitle files">
+      <div class="upload-grid">
+
+        <div class="dropzone" id="dropzoneA" data-slot="A">
+          <div class="dropzone-label">Subtitle A</div>
+          <div class="dropzone-body">
+            <p class="dropzone-hint">Drag &amp; drop an .srt file here</p>
+            <button type="button" class="btn btn-ghost" id="browseA">Browse files…</button>
+            <input type="file" id="fileA" accept=".srt,.vtt,.txt" hidden />
+          </div>
+          <div class="dropzone-file" id="fileInfoA" hidden></div>
+        </div>
+
+        <div class="dropzone" id="dropzoneB" data-slot="B">
+          <div class="dropzone-label">Subtitle B</div>
+          <div class="dropzone-body">
+            <p class="dropzone-hint">Drag &amp; drop an .srt file here</p>
+            <button type="button" class="btn btn-ghost" id="browseB">Browse files…</button>
+            <input type="file" id="fileB" accept=".srt,.vtt,.txt" hidden />
+          </div>
+          <div class="dropzone-file" id="fileInfoB" hidden></div>
+        </div>
+
+      </div>
+
+      <div class="upload-controls">
+        <div class="mode-select">
+          <label for="alignMode">Alignment mode</label>
+          <select id="alignMode">
+            <option value="nearest">Nearest timestamp</option>
+            <option value="monotonic" selected>Monotonic (DP)</option>
+            <option value="dtw">Dynamic Time Warping</option>
+          </select>
+        </div>
+        <div class="control-buttons">
+          <button type="button" class="btn btn-primary" id="compareBtn" disabled>Compare</button>
+          <button type="button" class="btn btn-ghost" id="resetBtn">Reset</button>
+        </div>
+      </div>
+
+      <p class="status-line" id="statusLine" role="status"></p>
+    </section>
+
+    <!-- ============ STATS PANEL ============ -->
+    <section class="panel stats-panel" id="statsPanel" hidden aria-label="Comparison statistics">
+      <div class="stats-grid" id="statsGrid"><!-- populated by ui.js --></div>
+      <div class="suggestion-box" id="suggestionBox" hidden></div>
+    </section>
+
+    <!-- ============ GRAPHS ============ -->
+    <section class="panel graphs-panel" id="graphsPanel" hidden aria-label="Timing graphs">
+      <div class="graphs-grid">
+        <div class="graph-card">
+          <h3>Timing difference per subtitle</h3>
+          <canvas id="histogramCanvas" width="700" height="220"></canvas>
+        </div>
+        <div class="graph-card">
+          <h3>Cumulative drift</h3>
+          <canvas id="driftCanvas" width="700" height="220"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ FILTERS / SEARCH ============ -->
+    <section class="panel table-controls" id="tableControls" hidden aria-label="Filter and search results">
+      <div class="search-row">
+        <input type="search" id="searchBox" placeholder="Search text or timestamps…" />
+        <label class="threshold-field">
+          Min diff (ms)
+          <input type="number" id="thresholdInput" min="0" step="50" placeholder="0" />
+        </label>
+      </div>
+      <div class="filter-row" id="filterRow">
+        <button class="chip" data-filter="all" aria-pressed="true">All</button>
+        <button class="chip" data-filter="mismatches" aria-pressed="false">Mismatches</button>
+        <button class="chip" data-filter="missing" aria-pressed="false">Missing</button>
+        <button class="chip" data-filter="timing" aria-pressed="false">Timing problems</button>
+        <button class="chip" data-filter="textdiff" aria-pressed="false">Text differences</button>
+      </div>
+    </section>
+
+    <!-- ============ COMPARISON TABLE ============ -->
+    <section class="panel table-panel" id="tablePanel" hidden aria-label="Comparison table">
+      <div class="table-scroll" id="tableScroll">
+        <table id="compareTable">
+          <thead>
+            <tr>
+              <th data-key="timeA">Time A</th>
+              <th data-key="timeB">Time B</th>
+              <th data-key="diff">Time Diff</th>
+              <th data-key="quality">Match</th>
+              <th data-key="textA">Subtitle A</th>
+              <th data-key="textB">Subtitle B</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"><!-- populated by ui.js --></tbody>
+        </table>
+      </div>
+      <p class="table-footnote" id="tableFootnote"></p>
+    </section>
+
+    <!-- ============ EXPORT ============ -->
+    <section class="panel export-panel" id="exportPanel" hidden aria-label="Export results">
+      <span class="export-label">Export</span>
+      <button class="btn btn-ghost" id="exportCsv">CSV</button>
+      <button class="btn btn-ghost" id="exportJson">JSON</button>
+      <button class="btn btn-ghost" id="exportHtml">Standalone HTML report</button>
+    </section>
+
+  </main>
+
+  <footer class="app-footer">
+    <p>Runs entirely in your browser. No files are uploaded anywhere.</p>
+  </footer>
+
+  <!-- ============ MODULES (load order matters) ============ -->
+  <script src="parser.js"></script>
+  <script src="alignment.js"></script>
+  <script src="dtw.js"></script>
+  <script src="diff.js"></script>
+  <script src="statistics.js"></script>
+  <script src="graphs.js"></script>
+  <script src="export.js"></script>
+  <script src="ui.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
