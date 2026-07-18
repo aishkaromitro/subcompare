@@ -57,6 +57,14 @@
       <div class="upload-controls">
         <div class="mode-select">
           <label for="alignMode">Alignment mode</label>
+          <span class="info-tip" tabindex="0" aria-describedby="alignModeTip">
+            <span class="info-tip-icon" aria-hidden="true">i</span>
+            <span class="info-tip-bubble" id="alignModeTip" role="tooltip">
+              <p><strong>Nearest timestamp</strong> — matches each line to whichever line in the other file starts closest in time. Fast, but can produce crossed or duplicate matches.</p>
+              <p><strong>Monotonic (DP)</strong> — matches lines in time order and never backwards, balancing timing accuracy against leaving lines unmatched. Good default when the files are mostly aligned.</p>
+              <p><strong>Dynamic Time Warping</strong> — allows local stretching/compression to follow drift that grows or shrinks across the file, while still skipping lines that have no match.</p>
+            </span>
+          </span>
           <select id="alignMode">
             <option value="nearest">Nearest timestamp</option>
             <option value="monotonic" selected>Monotonic (DP)</option>
@@ -70,6 +78,34 @@
       </div>
 
       <p class="status-line" id="statusLine" role="status"></p>
+    </section>
+
+    <!-- ============ FIND & REPLACE ============ -->
+    <section class="panel find-replace-panel" id="findReplacePanel" hidden aria-label="Find and replace subtitle text">
+      <span class="sync-group-label">Find &amp; replace</span>
+      <div class="fr-row">
+        <label class="fr-field">
+          Find
+          <input type="text" id="frFind" placeholder="Text or regex pattern…" />
+        </label>
+        <label class="fr-field">
+          Replace with
+          <input type="text" id="frReplace" placeholder="Replacement text… ($1, $2 for regex groups)" />
+        </label>
+      </div>
+      <div class="fr-row fr-options">
+        <label class="fr-checkbox"><input type="checkbox" id="frRegex" /> Use regex</label>
+        <label class="fr-checkbox"><input type="checkbox" id="frCaseSensitive" /> Match case</label>
+        <div class="fr-target">
+          <label for="frTarget">Apply to</label>
+          <select id="frTarget">
+            <option value="A">Subtitle A</option>
+            <option value="B">Subtitle B</option>
+          </select>
+        </div>
+        <button type="button" class="btn btn-primary" id="frApply" disabled>Replace all</button>
+      </div>
+      <p class="fr-status" id="frStatus" role="status"></p>
     </section>
 
     <!-- ============ STATS PANEL ============ -->
@@ -134,33 +170,33 @@
 
     <!-- ============ COMPARISON TABLE ============ -->
     <section class="panel table-panel" id="tablePanel" hidden aria-label="Comparison table">
-      <div class="table-scroll" id="tableScroll">
-        <table id="compareTable">
-          <thead>
-            <tr>
-              <th class="sync-col">Sync</th>
-              <th data-key="timeA">Time A</th>
-              <th data-key="timeB">Time B</th>
-              <th data-key="diff">Time Diff</th>
-              <th data-key="quality">Match</th>
-              <th data-key="textA">Subtitle A</th>
-              <th data-key="textB">Subtitle B</th>
-            </tr>
-          </thead>
-          <tbody id="tableBody"><!-- populated by ui.js --></tbody>
-        </table>
+      <div class="table-panel-body">
+        <div class="table-scroll" id="tableScroll">
+          <table id="compareTable">
+            <thead>
+              <tr>
+                <th class="sync-col">Sync</th>
+                <th data-key="timeA">Time A</th>
+                <th data-key="timeB">Time B</th>
+                <th data-key="diff">Time Diff</th>
+                <th data-key="quality">Match</th>
+                <th data-key="textA">Subtitle A</th>
+                <th data-key="textB">Subtitle B</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"><!-- populated by ui.js --></tbody>
+          </table>
+        </div>
+        <div class="time-scrubber" id="timeScrubber" aria-hidden="true" title="Click or drag to jump to a time">
+          <canvas id="scrubberCanvas"></canvas>
+        </div>
       </div>
       <p class="table-footnote" id="tableFootnote"></p>
     </section>
 
     <!-- ============ EXPORT ============ -->
     <section class="panel export-panel" id="exportPanel" hidden aria-label="Export results">
-      <span class="export-label">Export</span>
-      <button class="btn btn-ghost" id="exportCsv">CSV</button>
-      <button class="btn btn-ghost" id="exportJson">JSON</button>
-      <button class="btn btn-ghost" id="exportHtml">Standalone HTML report</button>
-      <span class="export-divider" aria-hidden="true"></span>
-      <span class="export-label">Edited subtitles</span>
+      <span class="export-label">Export edited subtitles</span>
       <button class="btn btn-ghost" id="exportSrtA">Subtitle A (.srt)</button>
       <button class="btn btn-ghost" id="exportSrtB">Subtitle B (.srt)</button>
     </section>
@@ -177,8 +213,10 @@
   <script src="dtw.js"></script>
   <script src="diff.js"></script>
   <script src="sync.js"></script>
+  <script src="findreplace.js"></script>
   <script src="statistics.js"></script>
   <script src="graphs.js"></script>
+  <script src="scrubber.js"></script>
   <script src="export.js"></script>
   <script src="ui.js"></script>
   <script src="app.js"></script>

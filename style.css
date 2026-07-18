@@ -170,6 +170,63 @@ button, input, select { font-family: inherit; font-size: inherit; }
 }
 .mode-select { display: flex; align-items: center; gap: 8px; }
 .mode-select label { color: var(--text-muted); font-size: 12.5px; }
+
+.info-tip {
+  position: relative;
+  display: inline-flex;
+  cursor: help;
+}
+.info-tip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1px solid var(--text-faint);
+  color: var(--text-faint);
+  font-size: 10px;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+}
+.info-tip:hover .info-tip-icon,
+.info-tip:focus-visible .info-tip-icon {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.info-tip-bubble {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  width: 300px;
+  max-width: 80vw;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  text-align: left;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  z-index: 20;
+  white-space: normal;
+}
+.info-tip-bubble p { margin: 0 0 8px; }
+.info-tip-bubble p:last-child { margin-bottom: 0; }
+.info-tip-bubble strong { color: var(--accent); font-weight: 600; }
+.info-tip:hover .info-tip-bubble,
+.info-tip:focus-visible .info-tip-bubble {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
 .mode-select select {
   background: var(--panel-alt);
   color: var(--text);
@@ -267,6 +324,69 @@ button, input, select { font-family: inherit; font-size: inherit; }
   border-radius: var(--radius);
 }
 
+/* ============ FIND & REPLACE ============ */
+.find-replace-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.fr-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.fr-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 220px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+.fr-field input {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 9px 12px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.fr-options { align-items: center; }
+.fr-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.fr-checkbox input { accent-color: var(--accent); cursor: pointer; }
+.fr-target {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+.fr-target select {
+  background: var(--panel-alt);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 7px 10px;
+}
+.fr-status {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  min-height: 1em;
+}
+.fr-status.error { color: var(--match-bad); }
+
 /* ============ SYNC TOOLS ============ */
 .sync-panel {
   display: flex;
@@ -352,9 +472,27 @@ button, input, select { font-family: inherit; font-size: inherit; }
 
 /* ============ TABLE ============ */
 .table-panel { padding: 0; overflow: hidden; }
+.table-panel-body {
+  display: flex;
+  align-items: stretch;
+}
 .table-scroll {
+  flex: 1;
+  min-width: 0;
   max-height: 560px;
   overflow: auto;
+}
+.time-scrubber {
+  flex: 0 0 56px;
+  width: 56px;
+  height: 560px;
+  border-left: 1px solid var(--border);
+  cursor: pointer;
+}
+.time-scrubber canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 table {
   width: 100%;
@@ -467,11 +605,6 @@ mark.search-hit {
   color: var(--text-muted);
   font-size: 12.5px;
   margin-right: 4px;
-}
-.export-divider {
-  width: 1px;
-  height: 20px;
-  background: var(--border);
 }
 
 /* ============ FOOTER ============ */

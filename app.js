@@ -25,7 +25,9 @@
     search: '',
     sortKey: null,
     sortDir: 'asc',
-    syncPoints: new Set() // row.id values marked as point-sync anchors
+    syncPoints: new Set(), // row.id values marked as point-sync anchors
+    lastVisibleRows: [],   // the exact array last passed to SubtitleUI.renderTable — tbody's <tr> order matches this 1:1
+    scrubberDomainMax: SubtitleScrubber.THIRTY_MIN_MS
   };
 
   /* ---------------------------------------------------------------------
@@ -44,6 +46,15 @@
     compareBtn: document.getElementById('compareBtn'),
     resetBtn: document.getElementById('resetBtn'),
     statusLine: document.getElementById('statusLine'),
+
+    findReplacePanel: document.getElementById('findReplacePanel'),
+    frFind: document.getElementById('frFind'),
+    frReplace: document.getElementById('frReplace'),
+    frRegex: document.getElementById('frRegex'),
+    frCaseSensitive: document.getElementById('frCaseSensitive'),
+    frTarget: document.getElementById('frTarget'),
+    frApply: document.getElementById('frApply'),
+    frStatus: document.getElementById('frStatus'),
 
     statsPanel: document.getElementById('statsPanel'),
     statsGrid: document.getElementById('statsGrid'),
@@ -67,14 +78,14 @@
     filterRow: document.getElementById('filterRow'),
 
     tablePanel: document.getElementById('tablePanel'),
+    tableScroll: document.getElementById('tableScroll'),
     tableBody: document.getElementById('tableBody'),
     tableFootnote: document.getElementById('tableFootnote'),
     tableHead: document.querySelector('#compareTable thead tr'),
+    timeScrubber: document.getElementById('timeScrubber'),
+    scrubberCanvas: document.getElementById('scrubberCanvas'),
 
     exportPanel: document.getElementById('exportPanel'),
-    exportCsv: document.getElementById('exportCsv'),
-    exportJson: document.getElementById('exportJson'),
-    exportHtml: document.getElementById('exportHtml'),
     exportSrtA: document.getElementById('exportSrtA'),
     exportSrtB: document.getElementById('exportSrtB')
   };
@@ -112,6 +123,7 @@
         infoEl.textContent = `${parsed.filename} — ${parsed.cues.length} cues (${parsed.encoding})`;
         setStatus(`Loaded ${parsed.filename}.`, false);
         updateCompareEnabled();
+        updateFindReplaceState();
       })
       .catch(err => {
         zoneEl.classList.remove('has-file');
@@ -127,6 +139,85 @@
   function setStatus(message, isError) {
     el.statusLine.textContent = message;
     el.statusLine.classList.toggle('error', !!isError);
+  }
+
+  /* ---------------------------------------------------------------------
+   * Find & replace — bulk text edit across every cue of one loaded file,
+   * with optional regex support. Independent of alignment (only text
+   * changes, never timing), so it works before a compare has ever run;
+   * if a compare HAS already run, affected rows are re-annotated so the
+   * diff/table view picks up the new text without a full re-align.
+   * ------------------------------------------------------------------- */
+
+  function updateFindReplaceState() {
+    const anyLoaded = !!(state.fileA || state.fileB);
+    el.findReplacePanel.hidden = !anyLoaded;
+    if (!anyLoaded) return;
+    const targetFile = el.frTarget.value === 'A' ? state.fileA : state.fileB;
+    el.frApply.disabled = !targetFile || el.frFind.value === '';
+  }
+
+  function setFindReplaceStatus(message, isError) {
+    el.frStatus.textContent = message;
+    el.frStatus.classList.toggle('error', !!isError);
+  }
+
+  function applyFindReplace() {
+    const targetSlot = el.frTarget.value;
+    const targetFile = targetSlot === 'A' ? state.fileA : state.fileB;
+    if (!targetFile) {
+      setFindReplaceStatus(`Load Subtitle ${targetSlot} first.`, true);
+      return;
+    }
+    const find = el.frFind.value;
+    if (!find) {
+      setFindReplaceStatus('Enter text or a pattern to find.', true);
+      return;
+    }
+
+    let pattern;
+    try {
+      pattern = SubtitleFindReplace.buildPattern(find, {
+        useRegex: el.frRegex.checked,
+        caseSensitive: el.frCaseSensitive.checked
+      });
+    } catch (err) {
+      setFindReplaceStatus(`Invalid regex: ${err.message}`, true);
+      return;
+    }
+
+    const { matchCount, cueCount } = SubtitleFindReplace.countMatches(targetFile.cues, pattern);
+    if (matchCount === 0) {
+      setFindReplaceStatus('No matches found.', false);
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Replace ${matchCount} match${matchCount === 1 ? '' : 'es'} across ${cueCount} line${cueCount === 1 ? '' : 's'} in Subtitle ${targetSlot}?`
+    );
+    if (!confirmed) return;
+
+    const replacement = el.frReplace.value;
+    SubtitleFindReplace.replaceInCues(targetFile.cues, pattern, replacement);
+    setFindReplaceStatus(`Replaced ${matchCount} match${matchCount === 1 ? '' : 'es'} across ${cueCount} line${cueCount === 1 ? '' : 's'} in Subtitle ${targetSlot}.`, false);
+
+    // Timing is untouched — just re-annotate so the diff/table view
+    // reflects the new text, no need to re-run alignment.
+    if (state.rows.length) {
+      state.rows.forEach(row => SubtitleStats.annotateRow(row));
+      renderTableWithCurrentFilters();
+    }
+  }
+
+  function setupFindReplace() {
+    el.frFind.addEventListener('input', updateFindReplaceState);
+    el.frTarget.addEventListener('change', updateFindReplaceState);
+    el.frApply.addEventListener('click', applyFindReplace);
+    [el.frFind, el.frReplace].forEach(input => {
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !el.frApply.disabled) applyFindReplace();
+      });
+    });
   }
 
   /* ---------------------------------------------------------------------
@@ -193,8 +284,81 @@
     let visible = SubtitleUI.filterRows(state.rows, state.filter, state.threshold);
     visible = SubtitleUI.searchRows(visible, state.search);
     if (state.sortKey) visible = SubtitleUI.sortRows(visible, state.sortKey, state.sortDir);
+    state.lastVisibleRows = visible;
     SubtitleUI.renderTable(el.tableBody, visible, state.search, state.syncPoints);
     el.tableFootnote.textContent = `Showing ${visible.length} of ${state.rows.length} rows.`;
+    updateScrubber();
+  }
+
+  /* ---------------------------------------------------------------------
+   * Time scrubber — a clickable/draggable axis next to the table for
+   * jumping straight to a timestamp in a long file. The axis domain is
+   * derived from ALL rows (state.rows) so it stays stable as filters
+   * change; clicking/dragging maps to the currently-rendered row set
+   * (state.lastVisibleRows), since that's what's actually in the DOM to
+   * scroll to.
+   * ------------------------------------------------------------------- */
+
+  function updateScrubber() {
+    state.scrubberDomainMax = SubtitleScrubber.computeDomain(state.rows);
+    SubtitleScrubber.draw(el.scrubberCanvas, state.scrubberDomainMax, computeViewportRange());
+  }
+
+  function computeViewportRange() {
+    if (state.lastVisibleRows.length === 0) return null;
+    const trs = el.tableBody.querySelectorAll('tr[data-diff]');
+    if (trs.length === 0) return null;
+    const scrollTop = el.tableScroll.scrollTop;
+    const viewBottom = scrollTop + el.tableScroll.clientHeight;
+
+    let startIdx = null, endIdx = null;
+    trs.forEach((tr, idx) => {
+      const top = tr.offsetTop;
+      const bottom = top + tr.offsetHeight;
+      if (bottom >= scrollTop && top <= viewBottom) {
+        if (startIdx === null) startIdx = idx;
+        endIdx = idx;
+      }
+    });
+    if (startIdx === null) return null;
+
+    const startMs = SubtitleScrubber.rowTime(state.lastVisibleRows[startIdx]);
+    const endMs = SubtitleScrubber.rowTime(state.lastVisibleRows[endIdx]);
+    if (startMs === null && endMs === null) return null;
+    return { startMs: startMs ?? endMs, endMs: endMs ?? startMs };
+  }
+
+  function jumpToScrubberY(clientY) {
+    if (state.lastVisibleRows.length === 0) return;
+    const rect = el.scrubberCanvas.getBoundingClientRect();
+    const targetMs = SubtitleScrubber.timeAtY(clientY - rect.top, rect.height, state.scrubberDomainMax);
+    const idx = SubtitleScrubber.nearestRowIndex(state.lastVisibleRows, targetMs);
+    if (idx === -1) return;
+    const tr = el.tableBody.children[idx];
+    if (!tr) return;
+    el.tableScroll.scrollTop = tr.offsetTop;
+  }
+
+  function setupScrubber() {
+    let dragging = false;
+    el.timeScrubber.addEventListener('mousedown', e => {
+      dragging = true;
+      jumpToScrubberY(e.clientY);
+    });
+    window.addEventListener('mousemove', e => {
+      if (dragging) jumpToScrubberY(e.clientY);
+    });
+    window.addEventListener('mouseup', () => { dragging = false; });
+
+    let scrollPending = false;
+    el.tableScroll.addEventListener('scroll', () => {
+      if (scrollPending) return;
+      scrollPending = true;
+      requestAnimationFrame(() => {
+        scrollPending = false;
+        SubtitleScrubber.draw(el.scrubberCanvas, state.scrubberDomainMax, computeViewportRange());
+      });
+    });
   }
 
   /* ---------------------------------------------------------------------
@@ -421,6 +585,8 @@
     state.sortKey = null;
     state.sortDir = 'asc';
     state.syncPoints.clear();
+    state.lastVisibleRows = [];
+    state.scrubberDomainMax = SubtitleScrubber.THIRTY_MIN_MS;
 
     [el.dropzoneA, el.dropzoneB].forEach(z => z.classList.remove('has-file', 'dragover'));
     [el.fileInfoA, el.fileInfoB].forEach(i => { i.hidden = true; i.textContent = ''; });
@@ -431,10 +597,18 @@
     SubtitleUI.updateFilterChips(el.filterRow, 'all');
     updateSyncPointStatus();
 
+    el.frFind.value = '';
+    el.frReplace.value = '';
+    el.frRegex.checked = false;
+    el.frCaseSensitive.checked = false;
+    el.frTarget.value = 'A';
+    setFindReplaceStatus('', false);
+
     [el.statsPanel, el.graphsPanel, el.syncPanel, el.tableControls, el.tablePanel, el.exportPanel].forEach(p => p.hidden = true);
     el.tableBody.innerHTML = '';
     setStatus('', false);
     updateCompareEnabled();
+    updateFindReplaceState();
   }
 
   /* ---------------------------------------------------------------------
@@ -452,17 +626,12 @@
     setupTableControls();
     setupInlineEditing();
     setupSyncPointSelection();
+    setupFindReplace();
+    setupScrubber();
 
     el.copyTimecodesAtoB.addEventListener('click', () => copyTimecodes('aToB'));
     el.copyTimecodesBtoA.addEventListener('click', () => copyTimecodes('bToA'));
 
-    el.exportCsv.addEventListener('click', () => SubtitleExport.downloadCsv(state.rows));
-    el.exportJson.addEventListener('click', () =>
-      SubtitleExport.downloadJson(state.rows, state.stats, { filenameA: state.fileA.filename, filenameB: state.fileB.filename, mode: state.mode })
-    );
-    el.exportHtml.addEventListener('click', () =>
-      SubtitleExport.downloadHtmlReport(state.rows, state.stats, { filenameA: state.fileA.filename, filenameB: state.fileB.filename, mode: state.mode })
-    );
     el.exportSrtA.addEventListener('click', () =>
       SubtitleExport.downloadSrt(state.fileA.cues, srtFilenameFor(state.fileA.filename))
     );
@@ -471,6 +640,7 @@
     );
 
     updateCompareEnabled();
+    updateFindReplaceState();
   }
 
   function srtFilenameFor(originalName) {

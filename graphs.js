@@ -247,7 +247,8 @@
     getThemeColors,
     niceAxisBounds,
     makeScale,
-    qualityKeyFromDiff
+    qualityKeyFromDiff,
+    prepareCanvas
   };
 
 })(typeof window !== 'undefined' ? window : globalThis);
