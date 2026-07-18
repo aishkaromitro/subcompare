@@ -267,6 +267,37 @@ button, input, select { font-family: inherit; font-size: inherit; }
   border-radius: var(--radius);
 }
 
+/* ============ SYNC TOOLS ============ */
+.sync-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.sync-group-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.sync-hint {
+  margin: 0 0 10px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+.sync-status {
+  margin: 0 0 10px;
+  color: var(--text);
+  font-size: 12.5px;
+}
+.sync-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 /* ============ TABLE CONTROLS ============ */
 .search-row {
   display: flex;
@@ -362,6 +393,15 @@ tbody td {
 tbody tr:hover { background: rgba(255,255,255,0.02); }
 tbody tr.row-highlight { background: rgba(242,184,75,0.08); }
 .mono { font-family: var(--font-mono); font-size: 12.5px; }
+
+.sync-col { width: 44px; }
+.sync-cell { text-align: center; }
+.sync-checkbox {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
 
 .editable-cell {
   cursor: text;

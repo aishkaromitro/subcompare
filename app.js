@@ -24,7 +24,8 @@
     threshold: 0,
     search: '',
     sortKey: null,
-    sortDir: 'asc'
+    sortDir: 'asc',
+    syncPoints: new Set() // row.id values marked as point-sync anchors
   };
 
   /* ---------------------------------------------------------------------
@@ -51,6 +52,14 @@
     graphsPanel: document.getElementById('graphsPanel'),
     histogramCanvas: document.getElementById('histogramCanvas'),
     driftCanvas: document.getElementById('driftCanvas'),
+
+    syncPanel: document.getElementById('syncPanel'),
+    copyTimecodesAtoB: document.getElementById('copyTimecodesAtoB'),
+    copyTimecodesBtoA: document.getElementById('copyTimecodesBtoA'),
+    syncPointStatus: document.getElementById('syncPointStatus'),
+    clearSyncPoints: document.getElementById('clearSyncPoints'),
+    applySyncBtoA: document.getElementById('applySyncBtoA'),
+    applySyncAtoB: document.getElementById('applySyncAtoB'),
 
     tableControls: document.getElementById('tableControls'),
     searchBox: document.getElementById('searchBox'),
@@ -135,16 +144,7 @@
     requestAnimationFrame(() => {
       setTimeout(() => {
         try {
-          const t0 = performance.now();
-          const rawRows = Alignment.align(state.mode, state.fileA.cues, state.fileB.cues);
-          SubtitleStats.annotateRows(rawRows);
-          state.rows = rawRows;
-          state.stats = SubtitleStats.computeStatistics(rawRows, state.fileA.cues.length, state.fileB.cues.length);
-          state.graphPoints = SubtitleStats.computeGraphData(rawRows);
-          const elapsed = (performance.now() - t0).toFixed(0);
-
-          renderAll();
-          setStatus(`Compared ${state.fileA.cues.length} vs ${state.fileB.cues.length} cues in ${elapsed} ms using ${state.mode} mode.`, false);
+          performCompare();
         } catch (err) {
           console.error(err);
           setStatus(`Comparison failed: ${err.message}`, true);
@@ -155,8 +155,29 @@
     });
   }
 
+  // Shared by the Compare button and by anything that mutates cue
+  // timing after a compare has already run (copy timecodes, point
+  // sync) — those need a full re-align since every row's diff/quality
+  // may now be different, not just the rows that were touched.
+  function performCompare() {
+    const t0 = performance.now();
+    const rawRows = Alignment.align(state.mode, state.fileA.cues, state.fileB.cues);
+    SubtitleStats.annotateRows(rawRows);
+    state.rows = rawRows;
+    state.stats = SubtitleStats.computeStatistics(rawRows, state.fileA.cues.length, state.fileB.cues.length);
+    state.graphPoints = SubtitleStats.computeGraphData(rawRows);
+    // Row ids are reassigned on every align, so previously selected
+    // sync points no longer point at meaningful rows.
+    state.syncPoints.clear();
+    updateSyncPointStatus();
+    const elapsed = (performance.now() - t0).toFixed(0);
+
+    renderAll();
+    setStatus(`Compared ${state.fileA.cues.length} vs ${state.fileB.cues.length} cues in ${elapsed} ms using ${state.mode} mode.`, false);
+  }
+
   function renderAll() {
-    [el.statsPanel, el.graphsPanel, el.tableControls, el.tablePanel, el.exportPanel].forEach(p => p.hidden = false);
+    [el.statsPanel, el.graphsPanel, el.syncPanel, el.tableControls, el.tablePanel, el.exportPanel].forEach(p => p.hidden = false);
 
     SubtitleUI.renderStats(el.statsGrid, state.stats);
     const suggestions = SubtitleStats.detectPatterns(state.rows, state.stats);
@@ -172,7 +193,7 @@
     let visible = SubtitleUI.filterRows(state.rows, state.filter, state.threshold);
     visible = SubtitleUI.searchRows(visible, state.search);
     if (state.sortKey) visible = SubtitleUI.sortRows(visible, state.sortKey, state.sortDir);
-    SubtitleUI.renderTable(el.tableBody, visible, state.search);
+    SubtitleUI.renderTable(el.tableBody, visible, state.search, state.syncPoints);
     el.tableFootnote.textContent = `Showing ${visible.length} of ${state.rows.length} rows.`;
   }
 
@@ -216,6 +237,98 @@
       SubtitleUI.updateSortIndicators(el.tableHead, state.sortKey, state.sortDir);
       renderTableWithCurrentFilters();
     });
+  }
+
+  /* ---------------------------------------------------------------------
+   * Timecode tools — copy timecodes wholesale from one file to the
+   * other, or "point sync": mark 2+ rows (where an A and a B line are
+   * known to correspond) as anchors and shift/stretch one side's whole
+   * timeline to line up with the other around those anchors.
+   *
+   * Both operations mutate cue objects in place (same instances the
+   * table/rows reference, per the pattern inline text editing already
+   * uses) and then re-run the full compare, since every cue on the
+   * target side may have moved — not just the rows that were selected.
+   * ------------------------------------------------------------------- */
+
+  function copyTimecodes(direction) {
+    const eligible = state.rows.filter(r => r.a && r.b).length;
+    if (eligible === 0) {
+      setStatus('No matched rows to copy timecodes for.', true);
+      return;
+    }
+    const label = direction === 'aToB' ? 'A → B' : 'B → A';
+    const confirmed = window.confirm(
+      `Copy timecodes ${label} for ${eligible} matched line${eligible === 1 ? '' : 's'}? ` +
+      `This overwrites the destination file's timing.`
+    );
+    if (!confirmed) return;
+
+    SubtitleSync.copyTimecodes(state.rows, direction);
+    setStatus(`Copied timecodes ${label} for ${eligible} line${eligible === 1 ? '' : 's'}. Re-aligning…`, false);
+    runCompare();
+  }
+
+  function applyPointSync(direction) {
+    const anchorRows = [...state.syncPoints]
+      .map(id => state.rows.find(r => r.id === id))
+      .filter(r => r && r.a && r.b);
+
+    if (anchorRows.length < 2) {
+      setStatus('Select at least 2 sync points first.', true);
+      return;
+    }
+
+    const syncingB = direction === 'bToA';
+    const anchors = anchorRows.map(row => syncingB
+      ? { from: row.b.startMs, to: row.a.startMs }
+      : { from: row.a.startMs, to: row.b.startMs });
+    const targetCues = syncingB ? state.fileB.cues : state.fileA.cues;
+    const targetLabel = syncingB ? 'B' : 'A';
+    const refLabel = syncingB ? 'A' : 'B';
+
+    const confirmed = window.confirm(
+      `Shift & stretch Subtitle ${targetLabel}'s timecodes to align with Subtitle ${refLabel} around ${anchorRows.length} sync points? ` +
+      `This overwrites Subtitle ${targetLabel}'s timing.`
+    );
+    if (!confirmed) return;
+
+    try {
+      SubtitleSync.applyPointSync(targetCues, anchors);
+    } catch (err) {
+      setStatus(err.message, true);
+      return;
+    }
+    setStatus(`Synced Subtitle ${targetLabel} to Subtitle ${refLabel} using ${anchorRows.length} points. Re-aligning…`, false);
+    runCompare();
+  }
+
+  function setupSyncPointSelection() {
+    el.tableBody.addEventListener('change', e => {
+      const checkbox = e.target.closest('.sync-checkbox');
+      if (!checkbox) return;
+      const id = Number(checkbox.dataset.rowId);
+      if (checkbox.checked) state.syncPoints.add(id);
+      else state.syncPoints.delete(id);
+      updateSyncPointStatus();
+    });
+
+    el.clearSyncPoints.addEventListener('click', () => {
+      state.syncPoints.clear();
+      updateSyncPointStatus();
+      renderTableWithCurrentFilters();
+    });
+
+    el.applySyncBtoA.addEventListener('click', () => applyPointSync('bToA'));
+    el.applySyncAtoB.addEventListener('click', () => applyPointSync('aToB'));
+  }
+
+  function updateSyncPointStatus() {
+    const n = state.syncPoints.size;
+    el.syncPointStatus.textContent = n === 1 ? '1 sync point selected.' : `${n} sync points selected.`;
+    const ready = n >= 2;
+    el.applySyncBtoA.disabled = !ready;
+    el.applySyncAtoB.disabled = !ready;
   }
 
   /* ---------------------------------------------------------------------
@@ -307,6 +420,7 @@
     state.search = '';
     state.sortKey = null;
     state.sortDir = 'asc';
+    state.syncPoints.clear();
 
     [el.dropzoneA, el.dropzoneB].forEach(z => z.classList.remove('has-file', 'dragover'));
     [el.fileInfoA, el.fileInfoB].forEach(i => { i.hidden = true; i.textContent = ''; });
@@ -315,8 +429,9 @@
     el.searchBox.value = '';
     el.thresholdInput.value = '';
     SubtitleUI.updateFilterChips(el.filterRow, 'all');
+    updateSyncPointStatus();
 
-    [el.statsPanel, el.graphsPanel, el.tableControls, el.tablePanel, el.exportPanel].forEach(p => p.hidden = true);
+    [el.statsPanel, el.graphsPanel, el.syncPanel, el.tableControls, el.tablePanel, el.exportPanel].forEach(p => p.hidden = true);
     el.tableBody.innerHTML = '';
     setStatus('', false);
     updateCompareEnabled();
@@ -336,6 +451,10 @@
 
     setupTableControls();
     setupInlineEditing();
+    setupSyncPointSelection();
+
+    el.copyTimecodesAtoB.addEventListener('click', () => copyTimecodes('aToB'));
+    el.copyTimecodesBtoA.addEventListener('click', () => copyTimecodes('bToA'));
 
     el.exportCsv.addEventListener('click', () => SubtitleExport.downloadCsv(state.rows));
     el.exportJson.addEventListener('click', () =>

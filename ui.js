@@ -121,11 +121,14 @@
    * Renders the table body. Accepts an optional search query purely for
    * <mark> highlighting purposes (filtering already happened upstream);
    * keeping highlight-only concerns here avoids re-deriving the filtered
-   * set twice.
+   * set twice. `syncPointIds`, if given, is a Set of row.id values that
+   * should render their "Sync" checkbox as checked (only rows with both
+   * an A and a B cue are eligible — that's what "matching lines in both
+   * files" means for point-sync anchor selection).
    */
-  function renderTable(tbody, rows, searchQuery) {
+  function renderTable(tbody, rows, searchQuery, syncPointIds) {
     if (rows.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" class="table-empty">No rows match the current search/filter.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="table-empty">No rows match the current search/filter.</td></tr>`;
       return;
     }
 
@@ -144,9 +147,15 @@
       const cellB = row.b
         ? `<td class="editable-cell" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" data-row-id="${row.id}" data-side="b">${htmlB}</td>`
         : `<td><span class="table-empty-cell">—</span></td>`;
+      const canSync = !!(row.a && row.b);
+      const checked = canSync && syncPointIds && syncPointIds.has(row.id) ? 'checked' : '';
+      const syncCell = canSync
+        ? `<td class="sync-cell"><input type="checkbox" class="sync-checkbox" data-row-id="${row.id}" ${checked} aria-label="Use this row as a point-sync anchor" /></td>`
+        : `<td class="sync-cell"><span class="table-empty-cell">—</span></td>`;
 
       return `
         <tr data-diff="${row.diffMs === null ? '' : row.diffMs}">
+          ${syncCell}
           <td class="mono">${highlightPlain(timeA, q)}</td>
           <td class="mono">${highlightPlain(timeB, q)}</td>
           <td class="mono">${diffLabel}</td>

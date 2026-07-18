@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Subtitle Comparator</title>
+<title>subcompare</title>
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -20,8 +20,7 @@
           </svg>
         </span>
         <div>
-          <h1>Subtitle Comparator</h1>
-          <p class="tagline">Compare two subtitle files by timecode — not by number.</p>
+          <h1>subcompare</h1>
         </div>
       </div>
     </div>
@@ -93,6 +92,28 @@
       </div>
     </section>
 
+    <!-- ============ TIMECODE SYNC TOOLS ============ -->
+    <section class="panel sync-panel" id="syncPanel" hidden aria-label="Timecode sync tools">
+      <div class="sync-group">
+        <span class="sync-group-label">Copy timecodes</span>
+        <p class="sync-hint">Overwrite every matched line's timecodes in one file with the corresponding line's timecodes from the other.</p>
+        <div class="sync-buttons">
+          <button type="button" class="btn btn-ghost" id="copyTimecodesAtoB">Copy A → B</button>
+          <button type="button" class="btn btn-ghost" id="copyTimecodesBtoA">Copy B → A</button>
+        </div>
+      </div>
+      <div class="sync-group">
+        <span class="sync-group-label">Point sync</span>
+        <p class="sync-hint">Check "Sync" on 2 or more rows where the A and B lines match, then shift &amp; stretch one file's timecodes to line up with the other around those points.</p>
+        <p class="sync-status" id="syncPointStatus">0 sync points selected.</p>
+        <div class="sync-buttons">
+          <button type="button" class="btn btn-ghost" id="clearSyncPoints">Clear sync points</button>
+          <button type="button" class="btn btn-primary" id="applySyncBtoA" disabled>Sync B to match A</button>
+          <button type="button" class="btn btn-primary" id="applySyncAtoB" disabled>Sync A to match B</button>
+        </div>
+      </div>
+    </section>
+
     <!-- ============ FILTERS / SEARCH ============ -->
     <section class="panel table-controls" id="tableControls" hidden aria-label="Filter and search results">
       <div class="search-row">
@@ -117,6 +138,7 @@
         <table id="compareTable">
           <thead>
             <tr>
+              <th class="sync-col">Sync</th>
               <th data-key="timeA">Time A</th>
               <th data-key="timeB">Time B</th>
               <th data-key="diff">Time Diff</th>
@@ -154,6 +176,7 @@
   <script src="alignment.js"></script>
   <script src="dtw.js"></script>
   <script src="diff.js"></script>
+  <script src="sync.js"></script>
   <script src="statistics.js"></script>
   <script src="graphs.js"></script>
   <script src="export.js"></script>
