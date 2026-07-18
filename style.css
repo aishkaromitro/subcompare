@@ -68,14 +68,6 @@ button, input, select { font-family: inherit; font-size: inherit; }
   flex-wrap: wrap;
 }
 .brand { display: flex; align-items: center; gap: 12px; }
-.brand-mark {
-  color: var(--accent);
-  display: inline-flex;
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--panel);
-}
 .brand h1 {
   margin: 0;
   font-size: 17px;
