@@ -71,6 +71,18 @@
             <option value="dtw">Dynamic Time Warping</option>
           </select>
         </div>
+        <div class="variance-field">
+          <label for="maxVariance">Max acceptable variance</label>
+          <span class="info-tip" tabindex="0" aria-describedby="varianceTip">
+            <span class="info-tip-icon" aria-hidden="true">i</span>
+            <span class="info-tip-bubble" id="varianceTip" role="tooltip">
+              <p>If a line's best possible match in the other file is farther apart than this, it's left unmatched instead of being force-paired — useful when one file only covers part of the timeline (e.g. only the sections in a second language).</p>
+              <p>Leave blank for no limit.</p>
+            </span>
+          </span>
+          <input type="number" id="maxVariance" min="0" step="0.5" placeholder="No limit" />
+          <span class="variance-unit">sec</span>
+        </div>
         <div class="control-buttons">
           <button type="button" class="btn btn-primary" id="compareBtn" disabled>Compare</button>
           <button type="button" class="btn btn-ghost" id="resetBtn">Reset</button>
@@ -140,10 +152,14 @@
       </div>
       <div class="sync-group">
         <span class="sync-group-label">Point sync</span>
-        <p class="sync-hint">Check "Sync" on 2 or more rows where the A and B lines match, then shift &amp; stretch one file's timecodes to line up with the other around those points.</p>
-        <p class="sync-status" id="syncPointStatus">0 sync points selected.</p>
+        <p class="sync-hint">In the table below, click "A" on the Subtitle A line and "B" on the Subtitle B line that should correspond — they don't need to be in the same row. Set that as a sync point, then repeat for a second (or more) point to shift &amp; stretch one file's timecodes to line up with the other around them.</p>
+        <p class="sync-status" id="syncPointStatus">Pick a line in Subtitle A, then its match in Subtitle B.</p>
         <div class="sync-buttons">
-          <button type="button" class="btn btn-ghost" id="clearSyncPoints">Clear sync points</button>
+          <button type="button" class="btn btn-ghost" id="commitSyncPoint" disabled>Set sync point</button>
+          <button type="button" class="btn btn-ghost" id="clearSyncPoints">Clear all sync points</button>
+        </div>
+        <ul class="sync-point-list" id="syncPointList"><!-- populated by app.js --></ul>
+        <div class="sync-buttons">
           <button type="button" class="btn btn-primary" id="applySyncBtoA" disabled>Sync B to match A</button>
           <button type="button" class="btn btn-primary" id="applySyncAtoB" disabled>Sync A to match B</button>
         </div>

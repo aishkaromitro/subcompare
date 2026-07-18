@@ -20,12 +20,15 @@
     stats: null,
     graphPoints: [],
     mode: 'monotonic',
+    maxVarianceMs: null, // null = no limit; hard cap passed to Alignment.align
     filter: 'all',
     threshold: 0,
     search: '',
     sortKey: null,
     sortDir: 'asc',
-    syncPoints: new Set(), // row.id values marked as point-sync anchors
+    syncPoints: [],       // committed point-sync anchors: { aCue, bCue } — direct cue references, independent of row pairing
+    pendingSyncA: null,    // cue picked for the A side of the next sync point, awaiting a B pick
+    pendingSyncB: null,    // cue picked for the B side of the next sync point, awaiting an A pick
     lastVisibleRows: [],   // the exact array last passed to SubtitleUI.renderTable — tbody's <tr> order matches this 1:1
     scrubberDomainMax: SubtitleScrubber.THIRTY_MIN_MS
   };
@@ -43,6 +46,7 @@
     fileInfoA: document.getElementById('fileInfoA'),
     fileInfoB: document.getElementById('fileInfoB'),
     alignMode: document.getElementById('alignMode'),
+    maxVariance: document.getElementById('maxVariance'),
     compareBtn: document.getElementById('compareBtn'),
     resetBtn: document.getElementById('resetBtn'),
     statusLine: document.getElementById('statusLine'),
@@ -68,6 +72,8 @@
     copyTimecodesAtoB: document.getElementById('copyTimecodesAtoB'),
     copyTimecodesBtoA: document.getElementById('copyTimecodesBtoA'),
     syncPointStatus: document.getElementById('syncPointStatus'),
+    commitSyncPoint: document.getElementById('commitSyncPoint'),
+    syncPointList: document.getElementById('syncPointList'),
     clearSyncPoints: document.getElementById('clearSyncPoints'),
     applySyncBtoA: document.getElementById('applySyncBtoA'),
     applySyncAtoB: document.getElementById('applySyncAtoB'),
@@ -252,15 +258,15 @@
   // may now be different, not just the rows that were touched.
   function performCompare() {
     const t0 = performance.now();
-    const rawRows = Alignment.align(state.mode, state.fileA.cues, state.fileB.cues);
+    const rawRows = Alignment.align(state.mode, state.fileA.cues, state.fileB.cues, { maxVarianceMs: state.maxVarianceMs });
     SubtitleStats.annotateRows(rawRows);
     state.rows = rawRows;
     state.stats = SubtitleStats.computeStatistics(rawRows, state.fileA.cues.length, state.fileB.cues.length);
     state.graphPoints = SubtitleStats.computeGraphData(rawRows);
-    // Row ids are reassigned on every align, so previously selected
-    // sync points no longer point at meaningful rows.
-    state.syncPoints.clear();
-    updateSyncPointStatus();
+    // Sync points reference cue objects directly (not row ids), so they
+    // stay valid across re-alignment — row ids get reassigned every
+    // align, but the underlying cues (and the user's chosen anchors)
+    // are untouched by which row they end up paired into.
     const elapsed = (performance.now() - t0).toFixed(0);
 
     renderAll();
@@ -285,7 +291,8 @@
     visible = SubtitleUI.searchRows(visible, state.search);
     if (state.sortKey) visible = SubtitleUI.sortRows(visible, state.sortKey, state.sortDir);
     state.lastVisibleRows = visible;
-    SubtitleUI.renderTable(el.tableBody, visible, state.search, state.syncPoints);
+    const syncInfo = { pendingA: state.pendingSyncA, pendingB: state.pendingSyncB, points: state.syncPoints };
+    SubtitleUI.renderTable(el.tableBody, visible, state.search, syncInfo);
     el.tableFootnote.textContent = `Showing ${visible.length} of ${state.rows.length} rows.`;
     updateScrubber();
   }
@@ -405,14 +412,23 @@
 
   /* ---------------------------------------------------------------------
    * Timecode tools — copy timecodes wholesale from one file to the
-   * other, or "point sync": mark 2+ rows (where an A and a B line are
-   * known to correspond) as anchors and shift/stretch one side's whole
-   * timeline to line up with the other around those anchors.
+   * other, or "point sync".
    *
-   * Both operations mutate cue objects in place (same instances the
-   * table/rows reference, per the pattern inline text editing already
-   * uses) and then re-run the full compare, since every cue on the
-   * target side may have moved — not just the rows that were selected.
+   * Point sync picks A and B lines *independently*: click "A" on
+   * whichever row has the right Subtitle A line, click "B" on
+   * whichever (possibly completely different) row has the right
+   * Subtitle B line, then "Set sync point" commits that pair as one
+   * anchor. This is deliberately decoupled from the aligned table's own
+   * row pairing, since that pairing is exactly what point sync exists
+   * to correct — trusting it to pick anchors would be circular for
+   * files that are badly out of sync. Repeat for a second (or more)
+   * point, then apply.
+   *
+   * Both copy-timecodes and point-sync mutate cue objects in place
+   * (same instances the table/rows reference, per the pattern inline
+   * text editing already uses) and then re-run the full compare, since
+   * every cue on the target side may have moved — not just the rows
+   * that were selected.
    * ------------------------------------------------------------------- */
 
   function copyTimecodes(direction) {
@@ -434,25 +450,22 @@
   }
 
   function applyPointSync(direction) {
-    const anchorRows = [...state.syncPoints]
-      .map(id => state.rows.find(r => r.id === id))
-      .filter(r => r && r.a && r.b);
-
-    if (anchorRows.length < 2) {
-      setStatus('Select at least 2 sync points first.', true);
+    if (state.syncPoints.length < 2) {
+      setStatus('Set at least 2 sync points first.', true);
       return;
     }
 
     const syncingB = direction === 'bToA';
-    const anchors = anchorRows.map(row => syncingB
-      ? { from: row.b.startMs, to: row.a.startMs }
-      : { from: row.a.startMs, to: row.b.startMs });
+    const anchors = state.syncPoints.map(p => syncingB
+      ? { from: p.bCue.startMs, to: p.aCue.startMs }
+      : { from: p.aCue.startMs, to: p.bCue.startMs });
     const targetCues = syncingB ? state.fileB.cues : state.fileA.cues;
     const targetLabel = syncingB ? 'B' : 'A';
     const refLabel = syncingB ? 'A' : 'B';
+    const n = state.syncPoints.length;
 
     const confirmed = window.confirm(
-      `Shift & stretch Subtitle ${targetLabel}'s timecodes to align with Subtitle ${refLabel} around ${anchorRows.length} sync points? ` +
+      `Shift & stretch Subtitle ${targetLabel}'s timecodes to align with Subtitle ${refLabel} around ${n} sync points? ` +
       `This overwrites Subtitle ${targetLabel}'s timing.`
     );
     if (!confirmed) return;
@@ -463,34 +476,94 @@
       setStatus(err.message, true);
       return;
     }
-    setStatus(`Synced Subtitle ${targetLabel} to Subtitle ${refLabel} using ${anchorRows.length} points. Re-aligning…`, false);
+    setStatus(`Synced Subtitle ${targetLabel} to Subtitle ${refLabel} using ${n} points. Re-aligning…`, false);
     runCompare();
   }
 
+  function pickSyncCue(rowId, side) {
+    const row = state.rows.find(r => r.id === rowId);
+    if (!row) return;
+    const cue = side === 'a' ? row.a : row.b;
+    if (!cue) return;
+    // A cue already locked into a committed sync point isn't pickable —
+    // remove it from the list first if it needs to change.
+    if (state.syncPoints.some(p => p.aCue === cue || p.bCue === cue)) return;
+
+    if (side === 'a') {
+      state.pendingSyncA = (state.pendingSyncA === cue) ? null : cue; // click again to deselect
+    } else {
+      state.pendingSyncB = (state.pendingSyncB === cue) ? null : cue;
+    }
+    updateSyncPointUI();
+    renderTableWithCurrentFilters();
+  }
+
+  function commitSyncPoint() {
+    if (!state.pendingSyncA || !state.pendingSyncB) return;
+    state.syncPoints.push({ aCue: state.pendingSyncA, bCue: state.pendingSyncB });
+    state.pendingSyncA = null;
+    state.pendingSyncB = null;
+    updateSyncPointUI();
+    renderTableWithCurrentFilters();
+  }
+
+  function removeSyncPoint(index) {
+    state.syncPoints.splice(index, 1);
+    updateSyncPointUI();
+    renderTableWithCurrentFilters();
+  }
+
+  function clearSyncPoints() {
+    state.syncPoints = [];
+    state.pendingSyncA = null;
+    state.pendingSyncB = null;
+    updateSyncPointUI();
+    renderTableWithCurrentFilters();
+  }
+
   function setupSyncPointSelection() {
-    el.tableBody.addEventListener('change', e => {
-      const checkbox = e.target.closest('.sync-checkbox');
-      if (!checkbox) return;
-      const id = Number(checkbox.dataset.rowId);
-      if (checkbox.checked) state.syncPoints.add(id);
-      else state.syncPoints.delete(id);
-      updateSyncPointStatus();
+    el.tableBody.addEventListener('click', e => {
+      const btn = e.target.closest('.sync-pick');
+      if (!btn || btn.disabled) return;
+      pickSyncCue(Number(btn.dataset.rowId), btn.dataset.side);
     });
 
-    el.clearSyncPoints.addEventListener('click', () => {
-      state.syncPoints.clear();
-      updateSyncPointStatus();
-      renderTableWithCurrentFilters();
+    el.commitSyncPoint.addEventListener('click', commitSyncPoint);
+    el.clearSyncPoints.addEventListener('click', clearSyncPoints);
+
+    el.syncPointList.addEventListener('click', e => {
+      const btn = e.target.closest('.sync-point-remove');
+      if (!btn) return;
+      removeSyncPoint(Number(btn.dataset.index));
     });
 
     el.applySyncBtoA.addEventListener('click', () => applyPointSync('bToA'));
     el.applySyncAtoB.addEventListener('click', () => applyPointSync('aToB'));
   }
 
-  function updateSyncPointStatus() {
-    const n = state.syncPoints.size;
-    el.syncPointStatus.textContent = n === 1 ? '1 sync point selected.' : `${n} sync points selected.`;
-    const ready = n >= 2;
+  function updateSyncPointUI() {
+    // Status line guides the user through the pick-A / pick-B / commit sequence.
+    if (state.pendingSyncA && state.pendingSyncB) {
+      el.syncPointStatus.textContent = 'Both lines picked — click "Set sync point" to save this pair.';
+    } else if (state.pendingSyncA) {
+      el.syncPointStatus.textContent = `A picked at ${SubtitleParser.msToTime(state.pendingSyncA.startMs)} — now pick the matching Subtitle B line.`;
+    } else if (state.pendingSyncB) {
+      el.syncPointStatus.textContent = `B picked at ${SubtitleParser.msToTime(state.pendingSyncB.startMs)} — now pick the matching Subtitle A line.`;
+    } else {
+      el.syncPointStatus.textContent = state.syncPoints.length === 0
+        ? 'Pick a line in Subtitle A, then its match in Subtitle B.'
+        : 'Pick another A/B pair, or apply the sync points below.';
+    }
+    el.commitSyncPoint.disabled = !(state.pendingSyncA && state.pendingSyncB);
+
+    el.syncPointList.innerHTML = state.syncPoints.map((p, i) => `
+      <li class="sync-point-item">
+        <span class="sync-point-badge">${i + 1}</span>
+        <span class="sync-point-times">A ${SubtitleParser.msToTime(p.aCue.startMs)} &harr; B ${SubtitleParser.msToTime(p.bCue.startMs)}</span>
+        <button type="button" class="sync-point-remove" data-index="${i}" aria-label="Remove sync point ${i + 1}">&times;</button>
+      </li>`).join('');
+
+    const ready = state.syncPoints.length >= 2;
     el.applySyncBtoA.disabled = !ready;
     el.applySyncAtoB.disabled = !ready;
   }
@@ -584,7 +657,9 @@
     state.search = '';
     state.sortKey = null;
     state.sortDir = 'asc';
-    state.syncPoints.clear();
+    state.syncPoints = [];
+    state.pendingSyncA = null;
+    state.pendingSyncB = null;
     state.lastVisibleRows = [];
     state.scrubberDomainMax = SubtitleScrubber.THIRTY_MIN_MS;
 
@@ -595,7 +670,7 @@
     el.searchBox.value = '';
     el.thresholdInput.value = '';
     SubtitleUI.updateFilterChips(el.filterRow, 'all');
-    updateSyncPointStatus();
+    updateSyncPointUI();
 
     el.frFind.value = '';
     el.frReplace.value = '';
@@ -620,6 +695,10 @@
     setupDropzone(el.dropzoneB, el.fileB, el.browseB, el.fileInfoB, 'B');
 
     el.alignMode.addEventListener('change', () => { state.mode = el.alignMode.value; });
+    el.maxVariance.addEventListener('input', () => {
+      const v = parseFloat(el.maxVariance.value);
+      state.maxVarianceMs = (!isNaN(v) && v >= 0) ? Math.round(v * 1000) : null;
+    });
     el.compareBtn.addEventListener('click', runCompare);
     el.resetBtn.addEventListener('click', resetAll);
 

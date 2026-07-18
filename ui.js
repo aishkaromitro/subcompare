@@ -118,15 +118,46 @@
   }
 
   /**
+   * Renders one "pick" button for a single cue (the A or B side of a
+   * row). Point sync now picks A and B lines *independently* — they
+   * don't need to be in the same row, or even both present in it — so
+   * each side gets its own button rather than one whole-row checkbox.
+   *   - no cue on this side: disabled placeholder.
+   *   - cue already part of a committed sync point: disabled, shows
+   *     that point's number instead of the side letter.
+   *   - cue currently the pending pick for this side: highlighted,
+   *     click again to deselect.
+   *   - otherwise: idle, clickable.
+   * `syncInfo` is `{ pendingA, pendingB, points }` — pendingA/pendingB
+   * are cue references (or null), points is an array of
+   * `{ aCue, bCue }` already-committed anchors.
+   */
+  function renderSyncPickButton(rowId, side, cue, syncInfo) {
+    const label = side === 'a' ? 'A' : 'B';
+    if (!cue) {
+      return `<button type="button" class="sync-pick" disabled aria-hidden="true">${label}</button>`;
+    }
+    const points = (syncInfo && syncInfo.points) || [];
+    const pointIndex = points.findIndex(p => p.aCue === cue || p.bCue === cue);
+    if (pointIndex !== -1) {
+      return `<button type="button" class="sync-pick sync-pick-committed" disabled title="Sync point ${pointIndex + 1}">${pointIndex + 1}</button>`;
+    }
+    const pending = syncInfo && (side === 'a' ? syncInfo.pendingA === cue : syncInfo.pendingB === cue);
+    const cls = pending ? 'sync-pick sync-pick-pending' : 'sync-pick';
+    const title = pending
+      ? 'Selected for a sync point — click to deselect'
+      : `Pick this Subtitle ${label} line for a sync point`;
+    return `<button type="button" class="${cls}" data-row-id="${rowId}" data-side="${side}" title="${title}">${label}</button>`;
+  }
+
+  /**
    * Renders the table body. Accepts an optional search query purely for
    * <mark> highlighting purposes (filtering already happened upstream);
    * keeping highlight-only concerns here avoids re-deriving the filtered
-   * set twice. `syncPointIds`, if given, is a Set of row.id values that
-   * should render their "Sync" checkbox as checked (only rows with both
-   * an A and a B cue are eligible — that's what "matching lines in both
-   * files" means for point-sync anchor selection).
+   * set twice. `syncInfo` (see renderSyncPickButton) drives the Sync
+   * column's pick-button states.
    */
-  function renderTable(tbody, rows, searchQuery, syncPointIds) {
+  function renderTable(tbody, rows, searchQuery, syncInfo) {
     if (rows.length === 0) {
       tbody.innerHTML = `<tr><td colspan="7" class="table-empty">No rows match the current search/filter.</td></tr>`;
       return;
@@ -147,11 +178,7 @@
       const cellB = row.b
         ? `<td class="editable-cell" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" data-row-id="${row.id}" data-side="b">${htmlB}</td>`
         : `<td><span class="table-empty-cell">—</span></td>`;
-      const canSync = !!(row.a && row.b);
-      const checked = canSync && syncPointIds && syncPointIds.has(row.id) ? 'checked' : '';
-      const syncCell = canSync
-        ? `<td class="sync-cell"><input type="checkbox" class="sync-checkbox" data-row-id="${row.id}" ${checked} aria-label="Use this row as a point-sync anchor" /></td>`
-        : `<td class="sync-cell"><span class="table-empty-cell">—</span></td>`;
+      const syncCell = `<td class="sync-cell">${renderSyncPickButton(row.id, 'a', row.a, syncInfo)}${renderSyncPickButton(row.id, 'b', row.b, syncInfo)}</td>`;
 
       return `
         <tr data-diff="${row.diffMs === null ? '' : row.diffMs}">

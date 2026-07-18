@@ -22,7 +22,15 @@
    * can produce crossed/duplicate matches — that's expected, it's the
    * "quick and dirty" mode.
    * ------------------------------------------------------------------- */
-  function alignNearest(cuesA, cuesB) {
+  function alignNearest(cuesA, cuesB, options) {
+    const opts = options || {};
+    // Hard cutoff: a candidate match farther apart than this is never
+    // accepted, no matter how close it is relative to other candidates —
+    // this is what lets a cue genuinely absent from the other file (e.g.
+    // it only covers part of the timeline) end up correctly unmatched
+    // instead of force-paired to whatever's nearest.
+    const maxVarianceMs = (opts.maxVarianceMs != null && opts.maxVarianceMs >= 0) ? opts.maxVarianceMs : null;
+
     const rows = [];
     const usedB = new Set();
 
@@ -38,9 +46,14 @@
       ) {
         bPointer++;
       }
-      const best = cuesB.length > 0 ? cuesB[bPointer] : null;
-      if (best) usedB.add(best);
-      rows.push({ a, b: best });
+      const nearest = cuesB.length > 0 ? cuesB[bPointer] : null;
+      const withinVariance = nearest && (maxVarianceMs === null || Math.abs(nearest.startMs - a.startMs) <= maxVarianceMs);
+      if (withinVariance) {
+        usedB.add(nearest);
+        rows.push({ a, b: nearest });
+      } else {
+        rows.push({ a, b: null });
+      }
     }
 
     // Any B cues nobody claimed get their own unmatched row, inserted in
@@ -84,13 +97,20 @@
     );
 
     const GAP_COST = opts.gapCost || 4000; // cost of leaving a cue unmatched (ms-equivalent)
+    // Hard cutoff, separate from GAP_COST: GAP_COST only makes skipping
+    // *preferable* once a match gets expensive enough — a match costing
+    // just under GAP_COST would still win. maxVarianceMs instead makes a
+    // match past this distance flatly ineligible, regardless of GAP_COST.
+    const maxVarianceMs = (opts.maxVarianceMs != null && opts.maxVarianceMs >= 0) ? opts.maxVarianceMs : null;
     const INF = Infinity;
 
     // matchCost(i, j): how good is it to pair cuesA[i] with cuesB[j]?
     // Lower is better. Based purely on timing (text isn't used at this
     // stage — diff.js handles text after alignment is decided).
     function matchCost(i, j) {
-      return Math.abs(cuesA[i].startMs - cuesB[j].startMs);
+      const diff = Math.abs(cuesA[i].startMs - cuesB[j].startMs);
+      if (maxVarianceMs !== null && diff > maxVarianceMs) return INF;
+      return diff;
     }
 
     // dp[i][j] stored as a band-limited map for memory efficiency:

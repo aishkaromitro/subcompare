@@ -75,6 +75,11 @@
     const band = Math.max(opts.band || 300, Math.abs(n - m) + 50);
     const GAP_COST = opts.gapCost || 4000;
     const weights = opts.weights || DEFAULT_WEIGHTS;
+    // Hard cutoff on start-time distance, same contract as alignment.js's
+    // alignNearest/alignMonotonic: a candidate match farther apart than
+    // this is never chosen, regardless of how favorable dtwCost's other
+    // factors (duration/overlap) make it look.
+    const maxVarianceMs = (opts.maxVarianceMs != null && opts.maxVarianceMs >= 0) ? opts.maxVarianceMs : null;
     const INF = Infinity;
 
     const dp = new Array(n + 1);
@@ -92,7 +97,9 @@
         let best = INF, bestChoice = null;
 
         if (i > 0 && j > 0 && dp[i - 1].has(j - 1)) {
-          const cost = dp[i - 1].get(j - 1) + dtwCost(cuesA[i - 1], cuesB[j - 1], weights);
+          const a = cuesA[i - 1], b = cuesB[j - 1];
+          const withinVariance = maxVarianceMs === null || Math.abs(a.startMs - b.startMs) <= maxVarianceMs;
+          const cost = withinVariance ? dp[i - 1].get(j - 1) + dtwCost(a, b, weights) : INF;
           if (cost < best) { best = cost; bestChoice = 'match'; }
         }
         if (i > 0 && dp[i - 1].has(j)) {

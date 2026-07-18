@@ -15,9 +15,9 @@
   'use strict';
 
   const FALLBACK_COLORS = {
-    text: '#E7EAEE', textMuted: '#8892A0', border: '#262B33',
-    accent: '#F2B84B',
-    excellent: '#6FCF97', good: '#F2C94C', poor: '#F2994A', bad: '#EB5757', none: '#4A5568'
+    text: '#1D1D1F', textMuted: '#6E6E73', border: '#D8D8DE',
+    accent: '#007AFF',
+    excellent: '#178A46', good: '#B8860B', poor: '#D97706', bad: '#DC2626', none: '#9AA0A6'
   };
 
   /**
