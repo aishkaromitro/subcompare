@@ -12,7 +12,7 @@
 2. **Align** — the two cue lists get matched up against each other by timestamp, using one of three algorithms you choose from. The output is a list of *rows*, where each row is `{ lineFromA, lineFromB }` — either side can be empty if that line has no counterpart in the other file.
 3. **Annotate** — each row gets a computed timing difference, a quality label (Excellent/Good/Poor/Bad), and a word-level text diff (so you can see exactly which words changed, not just that the line is different).
 4. **Show** — a stats panel, two graphs (timing difference per line, and cumulative drift across the file), and the full comparison table with search/filter/sort.
-5. **Fix** *(optional)* — tools to correct the two files against each other: bulk find-and-replace on text, copying timecodes from one file onto the other, or "point sync" (pick 1+ known-correct correspondences and have the software work out the correction for every other line).
+5. **Fix** *(optional)* — tools to correct the two files against each other: edit text inline, bulk find-and-replace on text, copying timecodes from one file onto the other, or "point sync" (pick 1+ known-correct correspondences and have the software work out the correction for every other line).
 6. **Export** — download either file back out as a `.srt`, picking up any edits you made along the way.
 
 ---
