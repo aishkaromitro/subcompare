@@ -450,8 +450,8 @@
   }
 
   function applyPointSync(direction) {
-    if (state.syncPoints.length < 2) {
-      setStatus('Set at least 2 sync points first.', true);
+    if (state.syncPoints.length < 1) {
+      setStatus('Set at least 1 sync point first.', true);
       return;
     }
 
@@ -463,9 +463,13 @@
     const targetLabel = syncingB ? 'B' : 'A';
     const refLabel = syncingB ? 'A' : 'B';
     const n = state.syncPoints.length;
+    const pointLabel = `${n} sync point${n === 1 ? '' : 's'}`;
+    // A single point has no second anchor to derive a scale from, so
+    // it's a plain shift; 2+ points shift AND stretch (see sync.js).
+    const actionLabel = n === 1 ? 'Shift' : 'Shift & stretch';
 
     const confirmed = window.confirm(
-      `Shift & stretch Subtitle ${targetLabel}'s timecodes to align with Subtitle ${refLabel} around ${n} sync points? ` +
+      `${actionLabel} Subtitle ${targetLabel}'s timecodes to align with Subtitle ${refLabel} using ${pointLabel}? ` +
       `This overwrites Subtitle ${targetLabel}'s timing.`
     );
     if (!confirmed) return;
@@ -476,7 +480,7 @@
       setStatus(err.message, true);
       return;
     }
-    setStatus(`Synced Subtitle ${targetLabel} to Subtitle ${refLabel} using ${n} points. Re-aligning…`, false);
+    setStatus(`Synced Subtitle ${targetLabel} to Subtitle ${refLabel} using ${pointLabel}. Re-aligning…`, false);
     runCompare();
   }
 
@@ -563,7 +567,7 @@
         <button type="button" class="sync-point-remove" data-index="${i}" aria-label="Remove sync point ${i + 1}">&times;</button>
       </li>`).join('');
 
-    const ready = state.syncPoints.length >= 2;
+    const ready = state.syncPoints.length >= 1;
     el.applySyncBtoA.disabled = !ready;
     el.applySyncAtoB.disabled = !ready;
   }

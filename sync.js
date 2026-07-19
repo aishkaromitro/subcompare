@@ -8,16 +8,20 @@
        one side's startMs/endMs with the other side's, in place.
 
      - buildPointSyncMapper(anchors) / applyPointSync(cues, anchors) —
-       classic subtitle "point sync": the caller supplies 2+ (from, to)
+       classic subtitle "point sync": the caller supplies 1+ (from, to)
        time anchors (e.g. "this line's current time" -> "the time it
        should have"), and every cue's startMs/endMs is remapped through
-       the piecewise-linear function those anchors define. Between two
-       anchors the mapping is a straight line (linear interpolation);
-       outside the outermost anchors it's extrapolated using the slope
-       of the nearest segment, so the whole file shifts and stretches
-       around the chosen points rather than only the bracketed portion.
-       With exactly 2 anchors this degenerates to the traditional
-       single shift+scale two-point sync.
+       the function those anchors define.
+         - 1 anchor: no second point to derive a scale from, so this is
+           a pure shift — every timestamp moves by the same constant
+           offset needed to land that one anchor exactly on target.
+         - 2+ anchors: a piecewise-linear function. Between two anchors
+           the mapping is a straight line (linear interpolation);
+           outside the outermost anchors it's extrapolated using the
+           slope of the nearest segment, so the whole file shifts and
+           stretches around the chosen points rather than only the
+           bracketed portion. With exactly 2 anchors this degenerates
+           to the traditional single shift+scale two-point sync.
 
    Pure logic only — no DOM. app.js decides which cues/rows to pass in
    and re-runs alignment afterwards, since every cue on the target side
@@ -53,9 +57,10 @@
   }
 
   /**
-   * Builds a piecewise-linear time-remapping function from a list of
-   * {from, to} anchors (both in ms). Anchors are sorted and deduplicated
-   * by `from` before use.
+   * Builds a time-remapping function from a list of {from, to} anchors
+   * (both in ms). Anchors are sorted and deduplicated by `from` before
+   * use. A single anchor produces a constant-shift function; 2+ produce
+   * a piecewise-linear one (see the module doc comment above).
    * @param {Array<{from:number, to:number}>} anchors
    * @returns {(t:number) => number}
    */
@@ -64,8 +69,15 @@
       .sort((p1, p2) => p1.from - p2.from)
       .filter((p, idx, arr) => idx === 0 || p.from !== arr[idx - 1].from);
 
-    if (points.length < 2) {
-      throw new Error('Point sync needs at least 2 sync points with distinct source times.');
+    if (points.length === 0) {
+      throw new Error('Point sync needs at least 1 sync point.');
+    }
+
+    if (points.length === 1) {
+      const shift = points[0].to - points[0].from;
+      return function map(t) {
+        return t + shift;
+      };
     }
 
     const segments = [];
