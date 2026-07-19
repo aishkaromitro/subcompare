@@ -573,10 +573,10 @@ tbody tr.row-highlight { background: rgba(0,122,255,0.08); }
 .mono { font-family: var(--font-mono); font-size: 12.5px; }
 
 .sync-col { width: 64px; }
-.sync-cell {
-  display: flex;
+.sync-cell { text-align: center; }
+.sync-pick-group {
+  display: inline-flex;
   gap: 4px;
-  justify-content: center;
 }
 .sync-pick {
   width: 22px;

@@ -178,7 +178,7 @@
       const cellB = row.b
         ? `<td class="editable-cell" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" data-row-id="${row.id}" data-side="b">${htmlB}</td>`
         : `<td><span class="table-empty-cell">—</span></td>`;
-      const syncCell = `<td class="sync-cell">${renderSyncPickButton(row.id, 'a', row.a, syncInfo)}${renderSyncPickButton(row.id, 'b', row.b, syncInfo)}</td>`;
+      const syncCell = `<td class="sync-cell"><span class="sync-pick-group">${renderSyncPickButton(row.id, 'a', row.a, syncInfo)}${renderSyncPickButton(row.id, 'b', row.b, syncInfo)}</span></td>`;
 
       return `
         <tr data-diff="${row.diffMs === null ? '' : row.diffMs}">
