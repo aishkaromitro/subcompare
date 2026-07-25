@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Subtitle Comparator — Stylesheet
+   subcomp — Stylesheet
    Design concept: a light, native-feeling macOS UI. White/near-white
    surfaces, system blue for primary actions, monospace for anything
    that is a timestamp or number, quiet sans-serif for interface chrome.
@@ -412,7 +412,7 @@ button, input, select { font-family: inherit; font-size: inherit; }
 }
 .sync-point-list {
   list-style: none;
-  margin: 0;
+  margin: 10px 0;
   padding: 0;
   display: flex;
   flex-direction: column;
